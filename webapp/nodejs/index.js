@@ -229,27 +229,31 @@ function getMessage(req, res) {
   }
 
   const { channel_id, last_message_id } = req.query
-  return pool.query('SELECT * FROM message WHERE id > ? AND channel_id = ? ORDER BY id DESC LIMIT 100', [last_message_id, channel_id])
+  return pool.query(`SELECT
+    user.name, user.display_name, user.avatar_icon,
+    message.id AS message_id, message.content AS message_content, message.created_at AS message_created_at
+    FROM message
+    INNER JOIN user ON message.user_id = user.id
+    WHERE message.id > ? AND message.channel_id = ?
+    ORDER BY message.id DESC LIMIT 100`,
+    [last_message_id, channel_id]
+  )
     .then(rows => {
       const response = []
       let p = Promise.resolve()
       rows.forEach((row, i) => {
+        console.log(row)
         const r = {}
-        r.id = row.id
-        p = p.then(() => {
-          return pool.query('SELECT name, display_name, avatar_icon FROM user WHERE id = ?', [row.user_id])
-            .then(([user]) => {
-              r.user = user
-              r.date = formatDate(row.created_at)
-              r.content = row.content
-              response[i] = r
-            })
-        })
-      })
+        r.id = row.message_id
+        r.user = row
+        r.date = formatDate(row.message_created_at)
+        r.content = row.message_content
+        response[i] = r
+      });
 
       return p.then(() => {
         response.reverse()
-        const maxMessageId = rows.length ? Math.max(...rows.map(r => r.id)) : 0
+        const maxMessageId = rows.length ? Math.max(...rows.map(r => r.message_id)) : 0
         return pool.query(`INSERT INTO haveread (user_id, channel_id, message_id, updated_at, created_at)
           VALUES (?, ?, ?, NOW(), NOW())
           ON DUPLICATE KEY UPDATE message_id = ?, updated_at = NOW()`,
@@ -257,6 +261,34 @@ function getMessage(req, res) {
           .then(() => res.json(response))
       })
     })
+  // return pool.query('SELECT * FROM message WHERE id > ? AND channel_id = ? ORDER BY id DESC LIMIT 100', [last_message_id, channel_id])
+  //   .then(rows => {
+  //     const response = []
+  //     let p = Promise.resolve()
+  //     rows.forEach((row, i) => {
+  //       const r = {}
+  //       r.id = row.id
+  //       p = p.then(() => {
+  //         return pool.query('SELECT name, display_name, avatar_icon FROM user WHERE id = ?', [row.user_id])
+  //           .then(([user]) => {
+  //             r.user = user
+  //             r.date = formatDate(row.created_at)
+  //             r.content = row.content
+  //             response[i] = r
+  //           })
+  //       })
+  //     })
+
+  //     return p.then(() => {
+  //       response.reverse()
+  //       const maxMessageId = rows.length ? Math.max(...rows.map(r => r.id)) : 0
+  //       return pool.query(`INSERT INTO haveread (user_id, channel_id, message_id, updated_at, created_at)
+  //         VALUES (?, ?, ?, NOW(), NOW())
+  //         ON DUPLICATE KEY UPDATE message_id = ?, updated_at = NOW()`,
+  //         [userId, channel_id, maxMessageId, maxMessageId])
+  //         .then(() => res.json(response))
+  //     })
+  //   })
 }
 
 function sleep (seconds) {
