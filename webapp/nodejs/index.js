@@ -285,7 +285,7 @@ function fetchUnread(req, res) {
       let p = Promise.resolve()
 
       channelIds.forEach(channelId => {
-        p = p.then(() => pool.query('SELECT * FROM haveread WHERE user_id = ? AND channel_id = ?', [userId, channelId]))
+        p = p.then(() => pool.query('SELECT message_id FROM haveread WHERE user_id = ? AND channel_id = ?', [userId, channelId]))
           .then(([row]) => {
             if (row) {
               return pool.query('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ? AND ? < id', [channelId, row.message_id])
@@ -322,7 +322,7 @@ function getHistory(req, res) {
         return
       }
       return pool.query(`SELECT
-      message.*,
+      message.id, message.content, message.created_at,
       user.name AS user_name, user.display_name AS user_display_name, user.avatar_icon AS user_avatar_icon
       FROM message
       INNER JOIN user ON message.user_id = user.id
