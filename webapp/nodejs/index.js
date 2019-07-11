@@ -334,7 +334,6 @@ function getHistory(req, res) {
           const messages = []
           let p = Promise.resolve()
           rows.forEach(row => {
-            console.log(row);
             const r = {}
             r.id = row.id
             p = p.then(() => {
@@ -367,7 +366,11 @@ function getProfile(req, res) {
   const { userName } = req.params
   return getChannelListInfo(pool)
     .then(({ channels }) => {
-      return pool.query('SELECT * FROM user WHERE name = ?', [userName])
+      return pool.query(`SELECT
+        id, name, display_name, avatar_icon
+        FROM user WHERE name = ?`,
+        [userName]
+      )
         .then(([user]) => {
           if (!user) {
             res.status(404).end()
