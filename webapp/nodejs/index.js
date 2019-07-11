@@ -48,7 +48,7 @@ pool.query = promisify(pool.query, pool)
 app.get('/initialize', getInitialize)
 function getInitialize(req, res) {
   return pool.query('DELETE FROM user WHERE id > 1000')
-    .then(() => pool.query('DELETE FROM image WHERE id > 1001'))
+    // .then(() => pool.query('DELETE FROM image WHERE id > 1001'))
     .then(() => pool.query('DELETE FROM channel WHERE id > 10'))
     .then(() => pool.query('DELETE FROM message WHERE id > 10000'))
     .then(() => pool.query('DELETE FROM haveread'))
@@ -242,7 +242,6 @@ function getMessage(req, res) {
       const response = []
       let p = Promise.resolve()
       rows.forEach((row, i) => {
-        console.log(row)
         const r = {}
         r.id = row.message_id
         r.user = row
