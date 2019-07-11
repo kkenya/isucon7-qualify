@@ -48,7 +48,6 @@ pool.query = promisify(pool.query, pool)
 app.get('/initialize', getInitialize)
 function getInitialize(req, res) {
   return pool.query('DELETE FROM user WHERE id > 1000')
-    // .then(() => pool.query('DELETE FROM image WHERE id > 1001'))
     .then(() => pool.query('DELETE FROM channel WHERE id > 10'))
     .then(() => pool.query('DELETE FROM message WHERE id > 10000'))
     .then(() => pool.query('DELETE FROM haveread'))
@@ -260,34 +259,6 @@ function getMessage(req, res) {
           .then(() => res.json(response))
       })
     })
-  // return pool.query('SELECT * FROM message WHERE id > ? AND channel_id = ? ORDER BY id DESC LIMIT 100', [last_message_id, channel_id])
-  //   .then(rows => {
-  //     const response = []
-  //     let p = Promise.resolve()
-  //     rows.forEach((row, i) => {
-  //       const r = {}
-  //       r.id = row.id
-  //       p = p.then(() => {
-  //         return pool.query('SELECT name, display_name, avatar_icon FROM user WHERE id = ?', [row.user_id])
-  //           .then(([user]) => {
-  //             r.user = user
-  //             r.date = formatDate(row.created_at)
-  //             r.content = row.content
-  //             response[i] = r
-  //           })
-  //       })
-  //     })
-
-  //     return p.then(() => {
-  //       response.reverse()
-  //       const maxMessageId = rows.length ? Math.max(...rows.map(r => r.id)) : 0
-  //       return pool.query(`INSERT INTO haveread (user_id, channel_id, message_id, updated_at, created_at)
-  //         VALUES (?, ?, ?, NOW(), NOW())
-  //         ON DUPLICATE KEY UPDATE message_id = ?, updated_at = NOW()`,
-  //         [userId, channel_id, maxMessageId, maxMessageId])
-  //         .then(() => res.json(response))
-  //     })
-  //   })
 }
 
 function sleep (seconds) {
@@ -350,36 +321,6 @@ function getHistory(req, res) {
         res.status(400).end()
         return
       }
-
-    //   return pool.query('SELECT * FROM message WHERE channel_id = ? ORDER BY id DESC LIMIT ? OFFSET ?', [channelId, N, (page - 1) * N])
-    //     .then(rows => {
-    //       const messages = []
-    //       let p = Promise.resolve()
-    //       rows.forEach(row => {
-    //         const r = {}
-    //         r.id = row.id
-    //         p = p.then(() => {
-    //           return pool.query('SELECT name, display_name, avatar_icon FROM user WHERE id = ?', [row.user_id])
-    //             .then(([user]) => {
-    //               console.log(user);
-    //               r.user = user
-    //               r.date = formatDate(row.created_at)
-    //               r.content = row.content
-    //               messages.push(r)
-    //             })
-    //         })
-    //       })
-    //       return p.then(() => {
-    //         messages.reverse()
-    //         return getChannelListInfo(pool, channelId)
-    //           .then(({ channels, description }) => {
-    //             res.render('history', {
-    //               req, channels, channelId, messages, maxPage, page,
-    //             })
-    //           })
-    //       })
-    //   })
-    // })
       return pool.query(`SELECT
       message.*,
       user.name AS user_name, user.display_name AS user_display_name, user.avatar_icon AS user_avatar_icon
@@ -504,7 +445,6 @@ function postProfile(req, res) {
         }
       }
       if (avatarName && avatarData) {
-        // p = p.then(() => pool.query('INSERT INTO image (name, data) VALUES (?, _binary ?)', [avatarName, avatarData]))
         fs.writeFileSync(`${ICONS_FOLDER}/${avatarName}`, avatarData);
         p = p.then(() => pool.query('UPDATE user SET avatar_icon = ? WHERE id = ?', [avatarName, userId]))
       }
@@ -516,35 +456,6 @@ function postProfile(req, res) {
       return p.then(() => res.redirect(303, '/'))
     })
 }
-
-// function ext2mime(ext) {
-//   switch(ext) {
-//     case '.jpg':
-//     case '.jpeg':
-//       return 'image/jpeg'
-//     case '.png':
-//       return 'image/png'
-//     case '.gif':
-//       return 'image/gif'
-//     default:
-//       return ''
-//   }
-// }
-
-//app.get('/icons/:fileName', getIcon)
-//function getIcon(req, res) {
-//  const { fileName } = req.params
-//  return pool.query('SELECT * FROM image WHERE name = ?', [fileName])
-//    .then(([row]) => {
-//      const ext = path.extname(fileName) || ''
-//      const mime = ext2mime(ext)
-//      if (!row || !mime) {
-//        res.status(404).end()
-//        return
-//      }
-//      res.header({ 'Content-Type': mime }).end(row.data)
-//    })
-//}
 
 app.listen(PORT, () => {
   console.log('Example app listening on port ' + PORT + '!')
