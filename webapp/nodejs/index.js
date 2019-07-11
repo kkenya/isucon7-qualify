@@ -351,21 +351,60 @@ function getHistory(req, res) {
         return
       }
 
-      return pool.query('SELECT * FROM message WHERE channel_id = ? ORDER BY id DESC LIMIT ? OFFSET ?', [channelId, N, (page - 1) * N])
+    //   return pool.query('SELECT * FROM message WHERE channel_id = ? ORDER BY id DESC LIMIT ? OFFSET ?', [channelId, N, (page - 1) * N])
+    //     .then(rows => {
+    //       const messages = []
+    //       let p = Promise.resolve()
+    //       rows.forEach(row => {
+    //         const r = {}
+    //         r.id = row.id
+    //         p = p.then(() => {
+    //           return pool.query('SELECT name, display_name, avatar_icon FROM user WHERE id = ?', [row.user_id])
+    //             .then(([user]) => {
+    //               console.log(user);
+    //               r.user = user
+    //               r.date = formatDate(row.created_at)
+    //               r.content = row.content
+    //               messages.push(r)
+    //             })
+    //         })
+    //       })
+    //       return p.then(() => {
+    //         messages.reverse()
+    //         return getChannelListInfo(pool, channelId)
+    //           .then(({ channels, description }) => {
+    //             res.render('history', {
+    //               req, channels, channelId, messages, maxPage, page,
+    //             })
+    //           })
+    //       })
+    //   })
+    // })
+      return pool.query(`SELECT
+      message.*,
+      user.name AS user_name, user.display_name AS user_display_name, user.avatar_icon AS user_avatar_icon
+      FROM message
+      INNER JOIN user ON message.user_id = user.id
+      WHERE channel_id = ?
+      ORDER BY id DESC LIMIT ? OFFSET ?`,
+      [channelId, N, (page - 1) * N]
+      )
         .then(rows => {
           const messages = []
           let p = Promise.resolve()
           rows.forEach(row => {
+            console.log(row);
             const r = {}
             r.id = row.id
             p = p.then(() => {
-              return pool.query('SELECT name, display_name, avatar_icon FROM user WHERE id = ?', [row.user_id])
-                .then(([user]) => {
-                  r.user = user
-                  r.date = formatDate(row.created_at)
-                  r.content = row.content
-                  messages.push(r)
-                })
+              r.user = {
+                name: row.user_name,
+                display_name: row.user_display_name,
+                avatar_icon: row.user_avatar_icon,
+              }
+              r.date = formatDate(row.created_at)
+              r.content = row.content
+              messages.push(r)
             })
           })
 
