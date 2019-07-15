@@ -10,3 +10,4 @@ fi
 sudo systemctl restart mysql
 sudo systemctl restart nginx
 sudo systemctl restart isubata.nodejs
+sudo journalctl -f
