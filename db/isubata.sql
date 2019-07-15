@@ -38,3 +38,9 @@ CREATE TABLE haveread (
   created_at DATETIME NOT NULL,
   PRIMARY KEY(user_id, channel_id)
 ) Engine=InnoDB DEFAULT CHARSET=utf8mb4;
+
+ALTER TABLE message ADD INDEX idx__channnel_id__id(channel_id, id);
+ALTER TABLE image ADD INDEX idx__name(name);
+ALTER TABLE haveread ADD INDEX idx__channel_id(channel_id);
+ALTER TABLE user ADD INDEX idx__name(name);
+
