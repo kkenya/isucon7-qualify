@@ -54,7 +54,6 @@ function getInitialize(req, res) {
     .then(() => pool.query('DELETE FROM channel WHERE id > 10'))
     .then(() => pool.query('DELETE FROM message WHERE id > 10000'))
     .then(() => pool.query('DELETE FROM haveread'))
-    // .then(() => pool.query('DELETE FROM haveread_summary'))
     .then(() => res.status(204).send(''))
 }
 
@@ -260,12 +259,6 @@ function getMessage(req, res) {
           VALUES (?, ?, ?, NOW(), NOW())
           ON DUPLICATE KEY UPDATE message_id = ?, updated_at = NOW()`,
           [userId, channel_id, maxMessageId, maxMessageId])
-          // .then(() => {
-          //   return pool.query(`INSERT INTO haveread_summary (user_id, channel_id, count)
-          //     values(?, ?, ?)
-          //     ON DUPLICATE KEY UPDATE count = ?`,
-          //     [userId, channel_id, maxMessageId, maxMessageId])
-          // })
           .then(() => res.json(response))
       })
     })
@@ -290,27 +283,29 @@ function fetchUnread(req, res) {
   return sleep(1.0)
     .then(() => {
       return Promise.all([
-        pool.query('SELECT id FROM channel'),
+        pool.query('SELECT id FROM channel')
+          .then(channels =>{
+            return channels.map(channel => channel.id)
+          }),
         pool.query('SELECT message_id, channel_id FROM haveread WHERE user_id = ?', [userId])
           .then((havereads) => {
-            const channelIdMessageIdMapping = new Map()
+            const havereadMapping = new Map()
 
             havereads.forEach(haveread => {
-              channelIdMessageIdMapping.set(haveread.channel_id, haveread.message_id)
+              havereadMapping.set(haveread.channel_id, haveread.message_id)
             })
 
-            return channelIdMessageIdMapping
+            return havereadMapping
           }),
       ])
     })
-    .then(([rows, channelIdMessageIdMapping]) => {
-      const channelIds = rows.map(row => row.id)
+    .then(([channelIds, havereadMapping]) => {
       const results = []
       let p = Promise.resolve()
 
       channelIds.forEach(channelId => {
         p = p.then(() => {
-          const maxMessageId = channelIdMessageIdMapping.get(channelId)
+          const maxMessageId = havereadMapping.get(channelId)
 
           if (maxMessageId) {
             return pool.query('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ? AND ? < id', [channelId, maxMessageId])
@@ -318,10 +313,10 @@ function fetchUnread(req, res) {
             return pool.query('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?', [channelId])
           }
         })
-        .then(([row3]) => {
+        .then(([message]) => {
           const r = {}
           r.channel_id = channelId
-          r.unread = row3.cnt
+          r.unread = message.cnt
           results.push(r)
         })
       })
@@ -488,3 +483,4 @@ function postProfile(req, res) {
 app.listen(PORT, () => {
   console.log('Example app listening on port ' + PORT + '!')
 })
+
