@@ -8,6 +8,9 @@ const multer = require('multer')
 const mysql = require('mysql')
 const ECT = require('ect')
 const promisify = require('es6-promisify')
+const Redis = require("ioredis")
+const redis = new Redis()
+
 
 const STATIC_FOLDER = path.join(__dirname, '..', 'public')
 const ICONS_FOLDER = path.join(STATIC_FOLDER, 'icons')
@@ -45,14 +48,19 @@ const pool = mysql.createPool({
 })
 pool.query = promisify(pool.query, pool)
 
+// Promise stack tarace
+process.on('unhandledRejection', console.dir)
+
 app.get('/initialize', getInitialize)
 function getInitialize(req, res) {
   return pool.query('DELETE FROM user WHERE id > 1000')
-    .then(() => pool.query('DELETE FROM image WHERE id > 1001'))
     .then(() => pool.query('DELETE FROM channel WHERE id > 10'))
     .then(() => pool.query('DELETE FROM message WHERE id > 10000'))
     .then(() => pool.query('DELETE FROM haveread'))
-    .then(() => res.status(204).send(''))
+    .then(() => {
+      redis.flushdb()
+      res.status(204).send('')
+    })
 }
 
 function dbGetUser(conn, userId) {
@@ -229,32 +237,36 @@ function getMessage(req, res) {
   }
 
   const { channel_id, last_message_id } = req.query
-  return pool.query('SELECT * FROM message WHERE id > ? AND channel_id = ? ORDER BY id DESC LIMIT 100', [last_message_id, channel_id])
+  return pool.query(`SELECT
+    user.name, user.display_name, user.avatar_icon,
+    message.id AS message_id, message.content AS message_content, message.created_at AS message_created_at
+    FROM message
+    INNER JOIN user ON message.user_id = user.id
+    WHERE message.id > ? AND message.channel_id = ?
+    ORDER BY message.id DESC LIMIT 100`,
+    [last_message_id, channel_id]
+  )
     .then(rows => {
       const response = []
       let p = Promise.resolve()
       rows.forEach((row, i) => {
         const r = {}
-        r.id = row.id
-        p = p.then(() => {
-          return pool.query('SELECT name, display_name, avatar_icon FROM user WHERE id = ?', [row.user_id])
-            .then(([user]) => {
-              r.user = user
-              r.date = formatDate(row.created_at)
-              r.content = row.content
-              response[i] = r
-            })
-        })
-      })
+        r.id = row.message_id
+        r.user = row
+        r.date = formatDate(row.message_created_at)
+        r.content = row.message_content
+        response[i] = r
+      });
 
       return p.then(() => {
         response.reverse()
-        const maxMessageId = rows.length ? Math.max(...rows.map(r => r.id)) : 0
+        res.json(response)
+        const maxMessageId = rows.length ? Math.max(...rows.map(r => r.message_id)) : 0
+        setUserHaveread(userId, channel_id, maxMessageId)
         return pool.query(`INSERT INTO haveread (user_id, channel_id, message_id, updated_at, created_at)
           VALUES (?, ?, ?, NOW(), NOW())
           ON DUPLICATE KEY UPDATE message_id = ?, updated_at = NOW()`,
           [userId, channel_id, maxMessageId, maxMessageId])
-          .then(() => res.json(response))
       })
     })
 }
@@ -276,27 +288,61 @@ function fetchUnread(req, res) {
   }
 
   return sleep(1.0)
-    .then(() => pool.query('SELECT id FROM channel'))
-    .then(rows => {
-      const channelIds = rows.map(row => row.id)
+    .then(() => {
+      return Promise.all([
+        pool.query('SELECT id FROM channel')
+          .then(channels =>{
+            return channels.map(channel => channel.id)
+          }),
+        pool.query('SELECT message_id, channel_id FROM haveread WHERE user_id = ?', [userId])
+          .then((havereads) => {
+            const havereadMapping = new Map()
+
+            havereads.forEach(haveread => {
+              havereadMapping.set(haveread.channel_id, haveread.message_id)
+            })
+
+            return havereadMapping
+          }),
+      ])
+    })
+    .then(([channelIds, havereadMapping]) => {
+    // .then(([channelIds]) => {
       const results = []
       let p = Promise.resolve()
 
       channelIds.forEach(channelId => {
-        p = p.then(() => pool.query('SELECT * FROM haveread WHERE user_id = ? AND channel_id = ?', [userId, channelId]))
-          .then(([row]) => {
-            if (row) {
-              return pool.query('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ? AND ? < id', [channelId, row.message_id])
-            } else {
-              return pool.query('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?', [channelId])
-            }
-          })
-          .then(([row3]) => {
-            const r = {}
-            r.channel_id = channelId
-            r.unread = row3.cnt
-            results.push(r)
-          })
+        p = p.then(() => {
+          return getUserHaveread(userId, channelId)
+            .then(messageId => {
+              if (messageId) {
+                return pool.query('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ? AND ? < id', [channelId, messageId])
+              } else {
+                return pool.query('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?', [channelId])
+              }
+            })
+          // const maxMessageId = havereadMapping.get(channelId)
+          // if (maxMessageId) {
+          //   return pool.query('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ? AND ? < id', [channelId, maxMessageId])
+          // } else {
+          //   return pool.query('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?', [channelId])
+          // }
+
+          // getUserHaveread(userId, channelId)
+          //   .then(maxMessageId => {
+          //     if (maxMessageId) {
+          //       return pool.query('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ? AND ? < id', [channelId, maxMessageId])
+          //     } else {
+          //       return pool.query('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?', [channelId])
+          //     }
+          //   })
+        })
+        .then(([message]) => {
+          const r = {}
+          r.channel_id = channelId
+          r.unread = message.cnt
+          results.push(r)
+        })
       })
 
       return p.then(() => results)
@@ -319,8 +365,15 @@ function getHistory(req, res) {
         res.status(400).end()
         return
       }
-
-      return pool.query('SELECT * FROM message WHERE channel_id = ? ORDER BY id DESC LIMIT ? OFFSET ?', [channelId, N, (page - 1) * N])
+      return pool.query(`SELECT
+      message.id, message.content, message.created_at,
+      user.name AS user_name, user.display_name AS user_display_name, user.avatar_icon AS user_avatar_icon
+      FROM message
+      INNER JOIN user ON message.user_id = user.id
+      WHERE channel_id = ?
+      ORDER BY id DESC LIMIT ? OFFSET ?`,
+      [channelId, N, (page - 1) * N]
+      )
         .then(rows => {
           const messages = []
           let p = Promise.resolve()
@@ -328,13 +381,14 @@ function getHistory(req, res) {
             const r = {}
             r.id = row.id
             p = p.then(() => {
-              return pool.query('SELECT name, display_name, avatar_icon FROM user WHERE id = ?', [row.user_id])
-                .then(([user]) => {
-                  r.user = user
-                  r.date = formatDate(row.created_at)
-                  r.content = row.content
-                  messages.push(r)
-                })
+              r.user = {
+                name: row.user_name,
+                display_name: row.user_display_name,
+                avatar_icon: row.user_avatar_icon,
+              }
+              r.date = formatDate(row.created_at)
+              r.content = row.content
+              messages.push(r)
             })
           })
 
@@ -356,7 +410,11 @@ function getProfile(req, res) {
   const { userName } = req.params
   return getChannelListInfo(pool)
     .then(({ channels }) => {
-      return pool.query('SELECT * FROM user WHERE name = ?', [userName])
+      return pool.query(`SELECT
+        id, name, display_name, avatar_icon
+        FROM user WHERE name = ?`,
+        [userName]
+      )
         .then(([user]) => {
           if (!user) {
             res.status(404).end()
@@ -434,7 +492,7 @@ function postProfile(req, res) {
         }
       }
       if (avatarName && avatarData) {
-        p = p.then(() => pool.query('INSERT INTO image (name, data) VALUES (?, _binary ?)', [avatarName, avatarData]))
+        fs.writeFileSync(`${ICONS_FOLDER}/${avatarName}`, avatarData);
         p = p.then(() => pool.query('UPDATE user SET avatar_icon = ? WHERE id = ?', [avatarName, userId]))
       }
 
@@ -446,35 +504,18 @@ function postProfile(req, res) {
     })
 }
 
-function ext2mime(ext) {
-  switch(ext) {
-    case '.jpg':
-    case '.jpeg':
-      return 'image/jpeg'
-    case '.png':
-      return 'image/png'
-    case '.gif':
-      return 'image/gif'
-    default:
-      return ''
-  }
-}
-
-app.get('/icons/:fileName', getIcon)
-function getIcon(req, res) {
-  const { fileName } = req.params
-  return pool.query('SELECT * FROM image WHERE name = ?', [fileName])
-    .then(([row]) => {
-      const ext = path.extname(fileName) || ''
-      const mime = ext2mime(ext)
-      if (!row || !mime) {
-        res.status(404).end()
-        return
-      }
-      res.header({ 'Content-Type': mime }).end(row.data)
-    })
-}
-
 app.listen(PORT, () => {
   console.log('Example app listening on port ' + PORT + '!')
 })
+
+function getUserHaveread(userId, channelId) {
+  return new Promise((resolve, reject) => {
+    redis.get(`user_id_channel_id_message_id:${userId}_${channelId}`, (err, result) => {
+      resolve(result);
+    })
+  })
+}
+
+function setUserHaveread(userId, channelId, messageId) {
+  redis.set(`user_id_channel_id_message_id:${userId}_${channelId}`, messageId);
+}

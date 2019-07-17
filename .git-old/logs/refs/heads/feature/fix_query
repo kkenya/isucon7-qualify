@@ -1,0 +1,18 @@
+0000000000000000000000000000000000000000 0c65e2579e4a0b4d11434788ee25e18bc66c38b6 Kenya Kawatsu <3982ne@gmail.com> 1562198810 +0000	branch: Created from HEAD
+0c65e2579e4a0b4d11434788ee25e18bc66c38b6 fdfd6d35f4bda6ddb3b6e987a5a52729415b0d3e Kenya Kawatsu <3982ne@gmail.com> 1562394705 +0000	commit (amend): 再起動用のスクリプト追加
+fdfd6d35f4bda6ddb3b6e987a5a52729415b0d3e b9301c3d565e8d1c945257020bfce131511acedf Kenya Kawatsu <3982ne@gmail.com> 1562394727 +0000	commit: 画像の書き出し
+b9301c3d565e8d1c945257020bfce131511acedf c2c743efb62c78cdd851dcccc1fe5cbebb796153 Kenya Kawatsu <3982ne@gmail.com> 1562423628 +0000	commit (amend): 画像の書き出し
+c2c743efb62c78cdd851dcccc1fe5cbebb796153 40b809d6a28e022584a8fb501346f77311640d4b Kenya Kawatsu <3982ne@gmail.com> 1562491952 +0000	commit: 画像をnginxで配信
+40b809d6a28e022584a8fb501346f77311640d4b 7333f43e7059f85db0d670752b6483b1901f1172 Kenya Kawatsu <3982ne@gmail.com> 1562722814 +0000	commit (amend): 画像をnginxで配信
+7333f43e7059f85db0d670752b6483b1901f1172 f6ba9b4230038d3c8af10a53654e41122741b8e5 Kenya Kawatsu <3982ne@gmail.com> 1562722843 +0000	commit: /messageのN+1を解消
+f6ba9b4230038d3c8af10a53654e41122741b8e5 fe315091fdb711df3dbd4667fc68db45e9425a62 Kenya Kawatsu <3982ne@gmail.com> 1562803567 +0000	commit: initializeの画像読み込み削除
+fe315091fdb711df3dbd4667fc68db45e9425a62 cbe4f1f009fe1b85e42461a5ae4418ace4830302 Kenya Kawatsu <3982ne@gmail.com> 1562805244 +0000	commit: history N+1解消
+cbe4f1f009fe1b85e42461a5ae4418ace4830302 63aab7a47d6febc5420ebe3e502757135833c463 Kenya Kawatsu <3982ne@gmail.com> 1562805277 +0000	commit: コメント削除
+63aab7a47d6febc5420ebe3e502757135833c463 882d35bb4ad7898c9c795e958f52a255b02f943a Kenya Kawatsu <3982ne@gmail.com> 1562805307 +0000	commit (amend): コメント削除
+882d35bb4ad7898c9c795e958f52a255b02f943a bf40183d9a33c895179cc00d4832aad1c3f063da Kenya Kawatsu <3982ne@gmail.com> 1562805330 +0000	commit (amend): コメント削除
+bf40183d9a33c895179cc00d4832aad1c3f063da 0cd541f910662ddc68a364abf91e164b2c0b0b27 Kenya Kawatsu <3982ne@gmail.com> 1562855230 +0000	commit: 余分なカラムを取得しない
+0cd541f910662ddc68a364abf91e164b2c0b0b27 0b52627732903c2ccd1c8b3cca6a5ee7946a2db0 Kenya Kawatsu <3982ne@gmail.com> 1562857497 +0000	commit: user余分なカラム取得削除
+0b52627732903c2ccd1c8b3cca6a5ee7946a2db0 3bdcd22bb72a571707b6366fa3840eb864ef854d Kenya Kawatsu <3982ne@gmail.com> 1563160020 +0000	commit: N+1 havereadを一度に取得
+3bdcd22bb72a571707b6366fa3840eb864ef854d 4d057646c40bd5676676d0043225e26b9e3e27b9 Kenya Kawatsu <3982ne@gmail.com> 1563160060 +0000	commit: 画像の書き出しスクリプトcommit忘れ
+4d057646c40bd5676676d0043225e26b9e3e27b9 cb561d4a209c3be9646d0363e661c678b9c3fed1 Kenya Kawatsu <3982ne@gmail.com> 1563181934 +0000	commit: index書き忘れ追加
+cb561d4a209c3be9646d0363e661c678b9c3fed1 f3eb09c3eafdf187e0aa70010259dab17ee0740f Kenya Kawatsu <3982ne@gmail.com> 1563201350 +0000	commit: Promise.allに処理をまとめる
