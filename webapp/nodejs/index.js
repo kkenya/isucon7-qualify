@@ -49,7 +49,7 @@ const pool = mysql.createPool({
 pool.query = promisify(pool.query, pool)
 
 // Promise stack tarace
-process.on('unhandledRejection', console.dir)
+// process.on('unhandledRejection', console.dir)
 
 app.get('/initialize', getInitialize)
 function getInitialize(req, res) {
@@ -263,7 +263,6 @@ function getMessage(req, res) {
       return p.then(() => {
         response.reverse()
         res.json(response)
-        // pool.query(`SELECT COUNT(*) as cnt FROM message WHERE channel_id = ? `, [channel_id])
         getMessageCount(channel_id)
           .then(messageCount => {
             setUserHaveread(userId, channel_id, messageCount)
@@ -290,14 +289,12 @@ function fetchUnread(req, res) {
 
   return sleep(1.0)
     .then(() => {
-      return Promise.all([
-        pool.query('SELECT id FROM channel')
-          .then(channels =>{
-            return channels.map(channel => channel.id)
-          }),
-      ])
+      return pool.query('SELECT id FROM channel')
+        .then(channels => {
+          return channels.map(channel => channel.id)
+        })
     })
-    .then(([channelIds]) => {
+    .then(channelIds => {
       const results = []
       let p = Promise.resolve()
 
@@ -305,7 +302,6 @@ function fetchUnread(req, res) {
         p = p.then(() => {
           return getUserHaveread(userId, channelId)
             .then(havereadCount => {
-              // return pool.query('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?', [channelId])
               return getMessageCount(channelId)
                 .then(count => {
                   const messageCount = parseInt(count) || 0
@@ -336,7 +332,6 @@ function getHistory(req, res) {
   let page = parseInt(req.query.page || '1')
 
   const N = 20
-  // return pool.query('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?', [channelId])
   getMessageCount(channelId)
     .then(messageCount => {
       const cnt = messageCount
