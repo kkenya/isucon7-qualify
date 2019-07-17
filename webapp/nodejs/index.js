@@ -8,6 +8,9 @@ const multer = require('multer')
 const mysql = require('mysql')
 const ECT = require('ect')
 const promisify = require('es6-promisify')
+const Redis = require("ioredis")
+const redis = new Redis()
+
 
 const STATIC_FOLDER = path.join(__dirname, '..', 'public')
 const ICONS_FOLDER = path.join(STATIC_FOLDER, 'icons')
@@ -46,14 +49,18 @@ const pool = mysql.createPool({
 pool.query = promisify(pool.query, pool)
 
 // Promise stack tarace
-process.on('unhandledRejection', console.dir);
+// process.on('unhandledRejection', console.dir)
 
 app.get('/initialize', getInitialize)
 function getInitialize(req, res) {
   return pool.query('DELETE FROM user WHERE id > 1000')
     .then(() => pool.query('DELETE FROM channel WHERE id > 10'))
     .then(() => pool.query('DELETE FROM message WHERE id > 10000'))
-    .then(() => pool.query('DELETE FROM haveread'))
+    .then(() => redis.flushdb())
+    .then(() => pool.query('SELECT channel_id, count(*) as cnt FROM message GROUP BY channel_id'))
+    .then(rows => rows.forEach(row => {
+      setMessageCount(row.channel_id, row.cnt)
+    }))
     .then(() => res.status(204).send(''))
 }
 
@@ -64,6 +71,7 @@ function dbGetUser(conn, userId) {
 
 function dbAddMessage(conn, channelId, userId, content) {
   return conn.query('INSERT INTO message (channel_id, user_id, content, created_at) VALUES (?, ?, ?, NOW())', [channelId, userId, content])
+  .then(() => incrMessageCount(channelId))
 }
 
 function loginRequired(req, res, next) {
@@ -254,12 +262,11 @@ function getMessage(req, res) {
 
       return p.then(() => {
         response.reverse()
-        const maxMessageId = rows.length ? Math.max(...rows.map(r => r.message_id)) : 0
-        return pool.query(`INSERT INTO haveread (user_id, channel_id, message_id, updated_at, created_at)
-          VALUES (?, ?, ?, NOW(), NOW())
-          ON DUPLICATE KEY UPDATE message_id = ?, updated_at = NOW()`,
-          [userId, channel_id, maxMessageId, maxMessageId])
-          .then(() => res.json(response))
+        res.json(response)
+        getMessageCount(channel_id)
+          .then(messageCount => {
+            setUserHaveread(userId, channel_id, messageCount)
+          })
       })
     })
 }
@@ -282,42 +289,35 @@ function fetchUnread(req, res) {
 
   return sleep(1.0)
     .then(() => {
-      return Promise.all([
-        pool.query('SELECT id FROM channel')
-          .then(channels =>{
-            return channels.map(channel => channel.id)
-          }),
-        pool.query('SELECT message_id, channel_id FROM haveread WHERE user_id = ?', [userId])
-          .then((havereads) => {
-            const havereadMapping = new Map()
-
-            havereads.forEach(haveread => {
-              havereadMapping.set(haveread.channel_id, haveread.message_id)
-            })
-
-            return havereadMapping
-          }),
-      ])
+      return pool.query('SELECT id FROM channel')
+        .then(channels => {
+          return channels.map(channel => channel.id)
+        })
     })
-    .then(([channelIds, havereadMapping]) => {
+    .then(channelIds => {
       const results = []
       let p = Promise.resolve()
 
       channelIds.forEach(channelId => {
         p = p.then(() => {
-          const maxMessageId = havereadMapping.get(channelId)
-
-          if (maxMessageId) {
-            return pool.query('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ? AND ? < id', [channelId, maxMessageId])
-          } else {
-            return pool.query('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?', [channelId])
-          }
+          return getUserHaveread(userId, channelId)
+            .then(havereadCount => {
+              return getMessageCount(channelId)
+                .then(count => {
+                  const messageCount = parseInt(count) || 0
+                  if (havereadCount) {
+                    return messageCount - havereadCount
+                  } else {
+                    return messageCount
+                  }
+                })
+            })
         })
-        .then(([message]) => {
-          const r = {}
-          r.channel_id = channelId
-          r.unread = message.cnt
-          results.push(r)
+        .then(unread => {
+          results.push({
+            channel_id: channelId,
+            unread: unread
+          })
         })
       })
 
@@ -332,9 +332,9 @@ function getHistory(req, res) {
   let page = parseInt(req.query.page || '1')
 
   const N = 20
-  return pool.query('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?', [channelId])
-    .then(([row2]) => {
-      const cnt = row2.cnt
+  getMessageCount(channelId)
+    .then(messageCount => {
+      const cnt = messageCount
       const maxPage = Math.max(Math.ceil(cnt / N), 1)
 
       if (isNaN(page) || page < 1 || page > maxPage) {
@@ -484,3 +484,22 @@ app.listen(PORT, () => {
   console.log('Example app listening on port ' + PORT + '!')
 })
 
+function getUserHaveread(userId, channelId) {
+  return redis.get(`haveread_user_channel:${userId}_${channelId}`)
+}
+
+function setUserHaveread(userId, channelId, count) {
+  redis.set(`haveread_user_channel:${userId}_${channelId}`, count)
+}
+
+function getMessageCount(channelId) {
+  return redis.get(`channel_count_channel:${channelId}`)
+}
+
+function setMessageCount(channelId, count) {
+  redis.set(`channel_count_channel:${channelId}`, count)
+}
+
+function incrMessageCount(channelId) {
+  redis.incr(`channel_count_channel:${channelId}`)
+}
