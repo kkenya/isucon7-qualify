@@ -261,7 +261,10 @@ function getMessage(req, res) {
         response.reverse()
         res.json(response)
         const maxMessageId = rows.length ? Math.max(...rows.map(r => r.message_id)) : 0
-        setUserHaveread(userId, channel_id, maxMessageId)
+        pool.query(`SELECT COUNT(*) as cnt FROM message WHERE channel_id = ? `, [channel_id, maxMessageId])
+          .then(([message]) => {
+            setUserHaveread(userId, channel_id, message.cnt)
+          })
       })
     })
 }
@@ -298,18 +301,21 @@ function fetchUnread(req, res) {
       channelIds.forEach(channelId => {
         p = p.then(() => {
           return getUserHaveread(userId, channelId)
-            .then(messageId => {
-              if (messageId) {
-                return pool.query('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ? AND ? < id', [channelId, messageId])
-              } else {
-                return pool.query('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?', [channelId])
-              }
+            .then(count => {
+              return pool.query('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?', [channelId])
+              .then(([message]) => {
+                if (count) {
+                  return message.cnt - count
+                } else {
+                  return message.cnt
+                }
+              })
             })
         })
-        .then(([message]) => {
+        .then((unread) => {
           const r = {}
           r.channel_id = channelId
-          r.unread = message.cnt
+          r.unread = unread
           results.push(r)
         })
       })
@@ -479,12 +485,12 @@ app.listen(PORT, () => {
 
 function getUserHaveread(userId, channelId) {
   return new Promise((resolve, reject) => {
-    redis.get(`user_id_channel_id_message_id:${userId}_${channelId}`, (err, result) => {
+    redis.get(`haveread_user_channel:${userId}_${channelId}`, (err, result) => {
       resolve(result);
     })
   })
 }
 
-function setUserHaveread(userId, channelId, messageId) {
-  redis.set(`user_id_channel_id_message_id:${userId}_${channelId}`, messageId);
+function setUserHaveread(userId, channelId, count) {
+  redis.set(`haveread_user_channel:${userId}_${channelId}`, count);
 }
