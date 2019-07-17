@@ -260,8 +260,7 @@ function getMessage(req, res) {
       return p.then(() => {
         response.reverse()
         res.json(response)
-        const maxMessageId = rows.length ? Math.max(...rows.map(r => r.message_id)) : 0
-        pool.query(`SELECT COUNT(*) as cnt FROM message WHERE channel_id = ? `, [channel_id, maxMessageId])
+        pool.query(`SELECT COUNT(*) as cnt FROM message WHERE channel_id = ? `, [channel_id])
           .then(([message]) => {
             setUserHaveread(userId, channel_id, message.cnt)
           })
@@ -332,8 +331,8 @@ function getHistory(req, res) {
 
   const N = 20
   return pool.query('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?', [channelId])
-    .then(([row2]) => {
-      const cnt = row2.cnt
+    .then(([message]) => {
+      const cnt = message.cnt
       const maxPage = Math.max(Math.ceil(cnt / N), 1)
 
       if (isNaN(page) || page < 1 || page > maxPage) {
@@ -484,11 +483,7 @@ app.listen(PORT, () => {
 })
 
 function getUserHaveread(userId, channelId) {
-  return new Promise((resolve, reject) => {
-    redis.get(`haveread_user_channel:${userId}_${channelId}`, (err, result) => {
-      resolve(result);
-    })
-  })
+  redis.get(`haveread_user_channel:${userId}_${channelId}`)
 }
 
 function setUserHaveread(userId, channelId, count) {
