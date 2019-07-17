@@ -56,7 +56,6 @@ function getInitialize(req, res) {
   return pool.query('DELETE FROM user WHERE id > 1000')
     .then(() => pool.query('DELETE FROM channel WHERE id > 10'))
     .then(() => pool.query('DELETE FROM message WHERE id > 10000'))
-    .then(() => pool.query('DELETE FROM haveread'))
     .then(() => {
       redis.flushdb()
       res.status(204).send('')
@@ -263,10 +262,6 @@ function getMessage(req, res) {
         res.json(response)
         const maxMessageId = rows.length ? Math.max(...rows.map(r => r.message_id)) : 0
         setUserHaveread(userId, channel_id, maxMessageId)
-        return pool.query(`INSERT INTO haveread (user_id, channel_id, message_id, updated_at, created_at)
-          VALUES (?, ?, ?, NOW(), NOW())
-          ON DUPLICATE KEY UPDATE message_id = ?, updated_at = NOW()`,
-          [userId, channel_id, maxMessageId, maxMessageId])
       })
     })
 }
@@ -294,20 +289,9 @@ function fetchUnread(req, res) {
           .then(channels =>{
             return channels.map(channel => channel.id)
           }),
-        pool.query('SELECT message_id, channel_id FROM haveread WHERE user_id = ?', [userId])
-          .then((havereads) => {
-            const havereadMapping = new Map()
-
-            havereads.forEach(haveread => {
-              havereadMapping.set(haveread.channel_id, haveread.message_id)
-            })
-
-            return havereadMapping
-          }),
       ])
     })
-    .then(([channelIds, havereadMapping]) => {
-    // .then(([channelIds]) => {
+    .then(([channelIds]) => {
       const results = []
       let p = Promise.resolve()
 
@@ -321,21 +305,6 @@ function fetchUnread(req, res) {
                 return pool.query('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?', [channelId])
               }
             })
-          // const maxMessageId = havereadMapping.get(channelId)
-          // if (maxMessageId) {
-          //   return pool.query('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ? AND ? < id', [channelId, maxMessageId])
-          // } else {
-          //   return pool.query('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?', [channelId])
-          // }
-
-          // getUserHaveread(userId, channelId)
-          //   .then(maxMessageId => {
-          //     if (maxMessageId) {
-          //       return pool.query('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ? AND ? < id', [channelId, maxMessageId])
-          //     } else {
-          //       return pool.query('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?', [channelId])
-          //     }
-          //   })
         })
         .then(([message]) => {
           const r = {}
