@@ -311,11 +311,11 @@ function fetchUnread(req, res) {
               })
             })
         })
-        .then((unread) => {
-          const r = {}
-          r.channel_id = channelId
-          r.unread = unread
-          results.push(r)
+        .then(unread => {
+          results.push({
+            channel_id: channelId,
+            unread: unread
+          })
         })
       })
 
@@ -483,9 +483,9 @@ app.listen(PORT, () => {
 })
 
 function getUserHaveread(userId, channelId) {
-  redis.get(`haveread_user_channel:${userId}_${channelId}`)
+  return redis.get(`haveread_user_channel:${userId}_${channelId}`)
 }
 
 function setUserHaveread(userId, channelId, count) {
-  redis.set(`haveread_user_channel:${userId}_${channelId}`, count);
+  redis.set(`haveread_user_channel:${userId}_${channelId}`, count)
 }
