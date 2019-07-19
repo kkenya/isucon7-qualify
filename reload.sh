@@ -1,6 +1,9 @@
 #!/bin/bash
 set -ex
 
+sudo cp /etc/nginx/sites-available/nginx.conf /home/isucon/isubata/webapp/
+sudo cp /etc/mysql/my.cnf /home/isucon/isubata/webapp/
+
 if [ -f /var/lib/mysql/slow.log ]; then
     sudo mv /var/log/mysql/slow.log /var/log/mysql/slow.log.$(date +%Y%m%d-%H%M%S) && sudo mysqladmin flush-logs
 fi
