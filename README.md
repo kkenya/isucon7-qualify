@@ -74,6 +74,9 @@ ALTER TABLE haveread ADD INDEX idx__channel_id(channel_id);
 ALTER TABLE user ADD INDEX idx__name(name);
 ```
 
+score: 19053
+
+
 ## DB画像書き出し
 
 [nodeでDBからディレクトリに画像を活気出すスクリプトを用意](https://github.com/kkenya/isucon7-qualify/commit/c2c743efb62c78cdd851dcccc1fe5cbebb796153)
@@ -137,62 +140,13 @@ nodeではioredisを利用
 ioredis利用
 スコア倍増20000
 
-## はまったポイント
-
-### 動かなくなった
-
-nodeのパスをexportし直す
-
-```bashrc
-# bashrcに書いておく
-export PATH=/home/isucon/local/node/bin:$PATH
-# 再起動用スクリプｔ
-reload
-# portが使えないとでるらしいことがわかった
-Jul 04 15:58:11 ubuntu-xenial node[3292]:       throw er; // Unhandled 'error' event
-pstree
- ├─gunicorn───4*[gunicorn───4*[{gunicorn}]]
-sudo systemctl stop isubata.python.service
-sudo systemctl disable isubata.python.service
-sudo systemctl enable isubata.nodejs.service
-reload
-Example app listening on port 5000!
-```
-
-## benchが失敗する
-
-```bash
-2019/07/04 16:13:39 [error] 3680#3680: *205 readv() failed (104: Connection reset by peer) while reading upstream, client: 172.28.128.8, server: isubata.example.com, request: "POST /profile HTTP/1.1", upstream: "http://127.0.0.1:5000/profile", host: "isubata.example.com"
-```
-
-dumpから復元
-
-index貼り直したら動かなくなった
-drop
-add
-したらおわた
-
-```bash
-  sudo journalctl -xe
-  mysql -uisucon -p isubata < backup-file.sql
-  sudo systemctl restart mysql
-```
-
-インデックス貼ってスコアアップ
-19053
-
-## redisで速さが下がる
+## redisでCOUNT(*)を保持
 
 haveread, messageのCOUNT(*)をmysqlからredisに保存
-10000 -> 9000
-下がった
-index？
+
+score: 10000 -> 9000
+なぜか下がった
 mysqlでサマリーテーブルでも良い？
-
-### benchmarkでエラー
-
-取得した値がstring,　ない場合の初期値がintだったためbenchmarkでエラー
-json: cannot unmarshal string into Go struct field JsonUnreadInfo.unread of type int
 
 ## TODO
 
@@ -201,6 +155,9 @@ json: cannot unmarshal string into Go struct field JsonUnreadInfo.unread of type
 - [ ] 3台構成を試す
 - [ ] tmuxまとめる
 - [ ] mysql, nginxをどうgit管理するか
+- [ ] redisをinix socketに変更
+- [ ] innodbのチューニング
+- [ ] fetchのレスポンスタイムを調整
 
 ## 予選通過の実装を見て
 
@@ -242,23 +199,4 @@ json: cannot unmarshal string into Go struct field JsonUnreadInfo.unread of type
   - cacheはiconsのみに絞る
   - /fetch を HTTP long polling
   - テンプレートの処理を少なく
-
-ngrep, tcpdump
-iconsをnginxでキャッシュ
-redisをinix socketに変更
-innodbのチューニング
-fetchのレスポンスタイムを遅くする
-
-/var/run/mysqld/mysqld.sock
-## 再起動用スクリプト
-
-```bash
-#!/bin/bash
-set -e
-cd /home/isucon/isubata/webapp
-git pull
-sudo /usr/sbin/nginx -t
-sudo service nginx reload
-sudo service isubata.nodejs restart
-```
 
