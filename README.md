@@ -1,165 +1,202 @@
-ISUCON7 予選問題
-====
+# isucon7-qualifyやったこと
 
-[予選マニュアル](https://gist.github.com/941/8c64842b71995a2d448315e2594f62c2)
+### デフォルトのEditorをVimに変更
 
-## 感想戦用、1VMでの動かし方
-
-### ディレクトリ構成
-
-```sh
-db      - データベーススキーマ等
-bench   - ベンチマーカー、初期データ生成器
-webapp  - 各種言語実装
-files   - 各種設定ファイル
+```bash
+sudo update-alternatives --config editor
 ```
 
-### 環境構築
+### shからbashに変更
 
-Ubuntu 16.04 のものをなるべくデフォルトで使います。
-
-まずは `isucon` ユーザーを作り、そのホームディレクトリ配下の `isubata` ディレクトリに
-リポジトリをチェックアウトします。
-
-```console
-$ sudo apt install git
-$ git clone https://github.com/isucon/isucon7-qualify.git isubata
+```bash
+$ echo $SHELL
+/bin/sh
+$ cat /etc/shells
+# /etc/shells: valid login shells
+/bin/sh
+/bin/dash
+/bin/bash
+/bin/rbash
+/usr/bin/tmux
+/usr/bin/screen
+$ sudo chsh -s /bin/bash isucon
+$ grep isucon /etc/passwd
+isucon:x:1002:1002::/home/isucon:/bin/bash
 ```
 
-nginx と MySQL は Ubuntu の標準のものを使います。
+### systemdを確認
 
-```
-$ sudo apt install mysql-server nginx
-```
-
-各言語は xbuild で最新安定版をインストールします。まず xbuild が必要とするライブラリをインストールします。
-
-```
-$ sudo apt install -y git curl libreadline-dev pkg-config autoconf automake build-essential libmysqlclient-dev \
-	libssl-dev python3 python3-dev python3-venv openjdk-8-jdk-headless libxml2-dev libcurl4-openssl-dev \
-        libxslt1-dev re2c bison libbz2-dev libreadline-dev libssl-dev gettext libgettextpo-dev libicu-dev \
-	libmhash-dev libmcrypt-dev libgd-dev libtidy-dev
+```bash
+ll /etc/systemd/system/
+sudo systemctl enable isuda.go isutar.go
 ```
 
-xbuildで言語をインストールします。ベンチマーカーのために、Goは必ずインストールしてください。
-他の言語は使わないのであればスキップしても問題ないと思います。
+## サーバー、mysql
 
-```
-cd
-git clone https://github.com/tagomoris/xbuild.git
+- alpインストール
+- slowquery設定
 
-mkdir local
-xbuild/ruby-install   -f 2.4.2   /home/isucon/local/ruby
-xbuild/perl-install   -f 5.26.1  /home/isucon/local/perl
-xbuild/node-install   -f v6.11.4 /home/isucon/local/node
-xbuild/go-install     -f 1.9     /home/isucon/local/go
-xbuild/python-install -f 3.6.2   /home/isucon/local/python
-xbuild/php-install    -f 7.1.9   /home/isucon/local/php -- --disable-phar --with-pcre-regex --with-zlib --enable-fpm --enable-pdo --with-mysqli=mysqlnd --with-pdo-mysql=mysqlnd --with-openssl --with-pcre-regex --with-pcre-dir --with-libxml-dir --enable-opcache --enable-bcmath --with-bz2 --enable-calendar --enable-cli --enable-shmop --enable-sysvsem --enable-sysvshm --enable-sysvmsg --enable-mbregex --enable-mbstring --with-mcrypt --enable-pcntl --enable-sockets --with-curl --enable-zip --with-pearAA
-```
+## mysql_config_editor
 
-### ベンチマーカーの準備
-
-Goを使うのでこれだけは最初に環境変数を設定しておく
-
-```
-export PATH=$HOME/local/go/bin:$HOME/go/bin:$PATH
+```bash
+mysql_config_editor set --login-path=local --host=localhost --user=isucon --password
+mysql_config_editor print --all
+[local]
+user = isucon
+password = *****
+host = localhost
+$ mysql --login-path=local
 ```
 
-ビルド
+[doc](https://dev.mysql.com/doc/refman/5.6/ja/mysql-config-editor.html)
 
-```sh
-go get github.com/constabulary/gb/...   # 初回のみ
-cd ~/isubata/bench
-gb vendor restore
-make
+## mysqlの確認
+
+table, index確認
+
+```mysql
+mysql> show tables;
+mysql> show index from channel;
+mysql> show index from haveread;
+mysql> show index from image;
+mysql> show index from message;
+mysql> show index from user;
 ```
 
-初期データ生成
+## index追加
 
-```sh
-cd ~/isubata/bench
-./bin/gen-initial-dataset   #isucon7q-initial-dataset.sql.gz ができる
+mysqldumpslowｓで確認した遅いクエリにindex追加
+
+```sql
+ALTER TABLE message ADD INDEX idx__channnel_id__id(channel_id, id);
+ALTER TABLE image ADD INDEX idx__name(name);
+ALTER TABLE haveread ADD INDEX idx__channel_id(channel_id);
+ALTER TABLE user ADD INDEX idx__name(name);
 ```
 
-### データベース初期化
+score: 19053
 
-データベース初期化、アプリが動くのに最低限必要なデータ投入
 
-```sh
-$ sudo ./db/init.sh
-$ sudo mysql
-mysql> CREATE USER isucon@'%' IDENTIFIED BY 'isucon';
-mysql> GRANT ALL on *.* TO isucon@'%';
-mysql> CREATE USER isucon@'localhost' IDENTIFIED BY 'isucon';
-mysql> GRANT ALL on *.* TO isucon@'localhost';
+## DB画像書き出し
+
+[nodeでDBからディレクトリに画像を活気出すスクリプトを用意](https://github.com/kkenya/isucon7-qualify/commit/c2c743efb62c78cdd851dcccc1fe5cbebb796153)
+
+```bash
+node output_image.js
 ```
 
-初期データ投入
+nginxで304を返す
 
-```sh
-zcat ~/isubata/bench/isucon7q-initial-dataset.sql.gz | sudo mysql isubata
+```nginx.conf
+server {
+        ...
+        root /home/isucon/isubata/webapp/public;
+
+        location /favicon.ico {
+                add_header Cache-Control "public max-age=86400";
+        }
+        location /fonts/ {
+                add_header Cache-Control "public max-age=86400";
+        }
+        location /js/ {
+                add_header Cache-Control "public max-age=86400";
+        }
+        location /css/ {
+                add_header Cache-Control "public max-age=86400";
+        }
+        location /icons {
+                add_header Cache-Control "public max-age=86400";
+        }
+
+        location / {
+                proxy_set_header Host $http_host;
+                proxy_pass http://127.0.0.1:5000;
+        }
+
+}
 ```
 
-デフォルトだとTCPが127.0.0.1しかbindしてないので、複数台構成に対応するには
-`/etc/mysql/mysql.conf.d/mysqld.cnf` で `bind-address = 127.0.0.1` になっている
-場所を `bind-address = 0.0.0.0` に書き換える。
+## 余分なカラム取得をしない
 
-
-### nginx
-
-```sh
-$ sudo cp ~/isubata/files/app/nginx.* /etc/nginx/sites-available
-$ cd /etc/nginx/sites-enabled
-$ sudo unlink default
-$ sudo ln -s ../sites-available/nginx.conf  # php の場合は nginx.php.conf
-$ sudo systemctl restart nginx
+```git
+- SELECT *
++ SELECT message_id
 ```
 
+## N+1解消
 
-### 参考実装(python)を動かす
+- [message](https://github.com/kkenya/isucon7-qualify/commit/f6ba9b4230038d3c8af10a53654e41122741b8e5)
+- [history](https://github.com/kkenya/isucon7-qualify/commit/cbe4f1f009fe1b85e42461a5ae4418ace4830302)
+- [haveread](https://github.com/kkenya/isucon7-qualify/commit/3bdcd22bb72a571707b6366fa3840eb864ef854d)
 
-初回のみ
+## Redisを導入しカウントを保存する
 
-```console
-$ cd ~/isubata/webapp/python
-$ ./setup.sh
-```
+nodeではioredisを利用
 
-起動
+[messageのcountをredisに保存](https://github.com/kkenya/isucon7-qualify/commit/9e99387d5357c6a172119c28a880e3d8671b7192)
 
-```sh
-export ISUBATA_DB_HOST=127.0.0.1
-export ISUBATA_DB_USER=isucon
-export ISUBATA_DB_PASSWORD=isucon
-./venv/bin/gunicorn --workers=10 -b '127.0.0.1:5000' app:app
-```
+200822
 
-予選本番では、 `/etc/hosts` に各ホスト名を書いて、環境変数は systemd から `env.sh` ファイルを読み込んでいました。
-この辺は適当に使いやすいように設定してください。
+ioredis利用
+スコア倍増20000
 
+## redisでCOUNT(*)を保持
 
-### ベンチマーク実行
+haveread, messageのCOUNT(*)をmysqlからredisに保存
 
-```console
-$ cd bench
-$ ./bin/bench -h # ヘルプ確認
-$ ./bin/bench -remotes=127.0.0.1 -output result.json
-```
+score: 10000 -> 9000
+なぜか下がった
+mysqlでサマリーテーブルでも良い？
 
-結果を見るには `sudo apt install jq` で jq をインストールしてから、
+## TODO
 
-```
-$ jq . < result.json
-```
+- [ ] どうやって302確認する
+- [ ] 帯域が足りないのはどうやって気づく
+- [ ] 3台構成を試す
+- [ ] tmuxまとめる
+- [ ] mysql, nginxをどうgit管理するか
+- [ ] redisをinix socketに変更
+- [ ] innodbのチューニング
+- [ ] fetchのレスポンスタイムを調整
 
-### 備考
+## 予選通過の実装を見て
 
-systemd に置く設定ファイルなどは files/ ディレクトリから探してください。
+|tearm|score|
+|:--:|:--:|
+|588,107|†空中庭園†《ガーデンプレイス》|
+|522,461|スギャブロエックス|
+|481,024|fujiwara組|
+|383,085|予算ZERO|
+|368,444|MSA|
+|314,995|白金動物園|
+|268,588|チーム新卒|
+|266,585|takedashi|
+|262,143|円山町|
+|256,120|都営三田線東急目黒線直通急行日吉行[学生]|
+|228,772|negainoido|
+|221,823|ソン・モテメン・マサヨシ|
 
+- †空中庭園†《ガーデンプレイス》
+  - アップリケーション側で画像を提供
+  - [画像ファイルをRedisに入れる](https://mozami.me/2017/10/24/isucon7_qualify.html)
+  - unixsocketに変更
+- スギャブロエックス
+  - WebDAVに画像を保存しそれぞれのサーバーからアクセス
+  - [3台構成でリクエストを振り分ける](https://kazeburo.hatenablog.com/entry/2017/10/23/181843)
+    - isu701 - nginx(reverse proxy), app
+    - isu702 - nginx(reverse proxy), app
+    - isu703 - nginx(reverse proxy, webdav), mysql
+  - それぞれのサーバーのNginxからETagを返した場合、値がずれる
+  - テンプレートの処理を少なく
+- fujiwara組
+  - Session に user 情報を全部入れて DB を引かない(効果小)
+  - [画像をアップロードされてきたサーバにそのまま保存し、保存時にどのサーバにあるかわかる情報をファイル名に入れてnginxでそれを元に画像があるサーバにproxy_passする](https://beatsync.net/main/log20171023.html)
+- MSA
+  - [nginxからtry_fileで存在しなかったら、もう片方にproxyする](https://mizkei.hatenablog.com/entry/2017/10/23/182820)
+- 白金動物園
+  - [blog](https://diary.sorah.jp/2017/10/23/isucon7q)
+  - mysqlのtextをvarcharに変更
+  - cacheはiconsのみに絞る
+  - /fetch を HTTP long polling
+  - テンプレートの処理を少なく
 
-### 使用データの取得元
-
-- 青空文庫 http://www.aozora.gr.jp/
-- なんちゃって個人情報 http://kazina.com/dummy/
-- いらすとや http://www.irasutoya.com/
-- pixabay https://pixabay.com/
