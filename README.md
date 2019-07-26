@@ -148,14 +148,34 @@ score: 10000 -> 9000
 なぜか下がった
 mysqlでサマリーテーブルでも良い？
 
+## redisをunixsocketへ
+
+```bash
+cp /etc/redis/redis.conf /etc/redis/redis.conf.org
+vim /etc/redis/redis.conf
+cp /etc/redis/redis.conf /home/isucon/isubata/webapp/
+# reload.shにredisを追加
+./reload.sh
+```
+
+socketファイルにアクセスできずエラー
+
+socketのパーミッションを777に変更
+
+```bash
+[ioredis] Unhandled error event: Error: connect EACCES /var/run/redis/redis.sock
+```
+
+score: 208910
+
 ## TODO
 
+- [x] redisをinix socketに変更
+- [ ] tmuxまとめる
+- [ ] mysql, nginxをどうgit管理するか
 - [ ] どうやって302確認する
 - [ ] 帯域が足りないのはどうやって気づく
 - [ ] 3台構成を試す
-- [ ] tmuxまとめる
-- [ ] mysql, nginxをどうgit管理するか
-- [ ] redisをinix socketに変更
 - [ ] innodbのチューニング
 - [ ] fetchのレスポンスタイムを調整
 
